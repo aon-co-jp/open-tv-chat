@@ -44,4 +44,11 @@ easy-web.tokyoから配布し、利用者は自分のPCに`open-web-server`を�
 - **2026-09-26 リポジトリ新設**: `aon-co-jp/open-tv-chat`を新規作成し、
   設計ドキュメント(README.md/CLAUDE.md/PORTING.md)のみを整備した段階。
   実装(クライアント本体・サーバーサイド・音声翻訳エンジン)は未着手。
-  次回再開時は[`PORTING.md`](PORTING.md)の「次回再開ポイント」を参照。
+- **2026-09-26 4項目の技術調査・方針案**: (1)音声翻訳エンジン=ASR:Whisper(MIT)
+  +MT:MADLAD-400(Apache-2.0)を商用可能な第一候補として選定(Meta製Seamless系/MMS
+  はCC-BY-NC 4.0で非商用のため不採用)、TTSはPiper候補(声モデル毎に要ライセンス
+  個別確認)。(2)クライアントはRust+Tauri候補(Windows/macOS/Linux)、Android/iPhone
+  はTauri Mobileの成熟度を実装着手時に再評価。(3)easy-web.tokyo配布導線は
+  `open-english`のインストーラー/リリースCI運用を参考にする方針。(4)対応言語
+  サンプル30件(要ネイティブ話者検証)を作成。詳細は[`PORTING.md`](PORTING.md)
+  「1〜4」の各節、次回再開ポイントも同ファイル末尾を参照。
