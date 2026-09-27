@@ -130,6 +130,48 @@ Win/Mac/Linux/Android/iPhone                          Win/Mac/Linux/Android/iPho
 ライセンスが異なるため個別確認が必要。詳細な比較表・方針は
 [`PORTING.md`](PORTING.md)「1. 音声翻訳エンジン調査結果」を参照。
 
+## マイク音声のノイズ低減・音質向上・音声超解像(調査完了・2026-09-27)
+
+Skype風の通話品質を実現するため、翻訳エンジン(ASR/MT/TTS)の前段で
+マイク音声を前処理する構成を検討した。
+
+| 技術 | 用途 | 候補 | ライセンス | 備考 |
+|---|---|---|---|---|
+| ノイズ抑制 | 背景雑音の除去 | [DeepFilterNet](https://github.com/Rikorose/DeepFilterNet) | MIT/Apache-2.0(モデルはBSD) | **コアDSPが元々Rust実装**、高品質・約40msの遅延で通話にも実用的。軽量な[RNNoise](https://github.com/xiph/rnnoise)(BSD)も代替候補 |
+| 音声超解像(帯域拡張) | 狭帯域音声を広帯域化(画像の超解像のアナロジー) | [AudioSR](https://github.com/haoheliu/versatile_audio_super_resolution)、[VoiceFixer](https://github.com/haoheliu/voicefixer) | AudioSR: コードMIT・重みApache-2.0 | **既存の[`open-audio-sr`](https://github.com/aon-co-jp/open-audio-sr)で実装・実機検証済み**(AudioSRを採用し、単純補間との定量比較で高域エネルギー生成を確認済み) |
+| 最新研究(2025〜2026) | よりリアルタイム向けの音声超解像 | StreamWSR(ストリーミング対応・軽量)、Wave-U-Mamba(ICASSP 2025) | 論文ベース、実装は要調査 | AudioSRは拡散モデルで処理が重く、**ライブ通話のリアルタイム制約には向かない可能性がある**ため、将来的な軽量化・高速化の候補として記録 |
+
+**方針**: ノイズ抑制はDeepFilterNet(Rustコアとの親和性が高く、実装言語の
+統一という既存方針に合致)を第一候補とする。音声超解像は、既に実装・実機
+検証済みの`open-audio-sr`(AudioSR)を再利用する構想だが、**AudioSRは拡散
+モデルでありリアルタイム通話向けではない可能性が高い**ため、ライブ通話の
+音声パイプラインに組み込めるか(または録音後処理限定にするか)は実装着手時に
+性能検証が必要(下記「関連リポジトリとの連携」参照)。
+
+## 関連リポジトリとの連携(2026-09-27方針、構想段階)
+
+音声処理(ノイズ抑制・音声超解像)と音声翻訳のパイプライン全体を高速化・
+高品質化するため、以下のaon-co-jpエコシステム内リポジトリと連携する構想
+がある(いずれも各リポジトリ側の成熟を待って実際の連携実装に着手する)。
+
+- **[`open-audio-sr`](https://github.com/aon-co-jp/open-audio-sr)**:
+  AudioSRによる音声超解像を実装・実機検証済みの既存資産。上記の通り
+  リアルタイム性の検証が必要。
+- **[`aruaru-llm`](https://github.com/aon-co-jp/aruaru-llm)**: 音声認識
+  (Whisper)の誤認識をLLMで文脈的に補正する、または翻訳の自然さをAIで
+  向上させる用途を検討。
+- **[`open-cuda`](https://github.com/aon-co-jp/open-cuda)**: ノイズ抑制・
+  音声超解像・ASR/MT/TTS推論のGPU高速化(拡散モデルベースのAudioSRを
+  リアルタイムに近づけるには特に重要)。
+- **[`open-directx`](https://github.com/aon-co-jp/open-directx)**:
+  `open-cuda`と共通の計算基盤を共有しつつ、クライアントの通話UI
+  (字幕表示・音質メーター等)の高速描画に使う。
+
+**現状の制約(`aruaru-vpn`と同様)**: `open-cuda`・`open-directx`は実体が
+乏しく、連携実装は各リポジトリの成熟を待つ必要がある。`open-audio-sr`は
+実装済みだが、TV CHATのライブ通話への統合(リアルタイム性の検証)は
+別途必要。
+
 ## 多言語表記ルール
 
 対応言語一覧は「英語名 (現地呼称のローマ字表記) = ネイティブ表記 (現地語での言語名)」
