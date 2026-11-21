@@ -1,3 +1,3 @@
 source: aon-co-jp/open-tv-chat
-commit: a80c57ec20367f230519ea4d62bd40a6d22694c8
-updated: 2026-11-20T05:26:03Z
+commit: 7dc3568d697a810a2c8a05f7ce7555cbbdb79e79
+updated: 2026-11-21T21:57:06Z
