@@ -330,3 +330,19 @@ P2P既定)を参照。
 ### 再開用メッセージ(2026-11-22、翻訳高速化・関連リポジトリ共有) / Resume message
 **日本語**: 前の続きです。`F:\runo\PORTING.md` 末尾の「翻訳の高速化の知見を関連リポジトリで共有」を読んでから、`open-tv-chat`・`maid-cafe-english`・`maid-cafe-tokyo`(`open-maid-cafe` という名前のリポジトリは存在しません)・`aruaru-llm`・`open-cuda`・`open-cpu`・`open-directx` の未了を、確認なしで自動で進めてください。順番: (1)常駐+文ごと翻訳を maid-cafe-english のコードへ反映、(2)`open-cuda-llm` に T5 を追加して candle と比較、(3)`open-cuda-whisper` と `rs-whisper` の比較、(4)GPU 実測。作業は手元PC(WSL)、VPS は配備と確認のみ。決まり: 本物で確認してから完了、秘密は書かない、新しいRESTは作らない、返答は日本語のみ。
 **English**: Continuing from before. Read "Sharing the translation-speed findings" at the end of `F:\runo\PORTING.md`, then keep working through the open items of `open-tv-chat`, `maid-cafe-english`, `maid-cafe-tokyo` (there is no repository named `open-maid-cafe`), `aruaru-llm`, `open-cuda`, `open-cpu` and `open-directx` without asking. Order: (1) apply resident + sentence-by-sentence translation to maid-cafe-english's code; (2) add T5 to `open-cuda-llm` and compare with candle; (3) compare `open-cuda-whisper` with `rs-whisper`; (4) GPU measurements. Work on the local PC (WSL); use the VPS only to deploy and verify. Rules: verify on real systems before saying done, never write secrets, no new REST.
+
+## 2026-11-23 追記: 翻訳モデル比較(M2M100 1.2B)と無音区切りの試作(日本語)
+**M2M100 1.2B(MIT、`jncraton/m2m100_1.2B-ct2-int8`、約1.2GB、WSLの `/root/m2m100-1.2b-ct2`)を 418M と同じ3文で測定**(CTranslate2、CPU 8スレッド、ビーム2):
+- 418M: 読み込み1.4秒、1文あたり0.27〜0.62秒。1.2B: 読み込み2.2秒、1文あたり0.75〜1.28秒(約2倍遅い)。
+- 品質は1.2Bが上: 「ask what you can do for your country」の命令の調子(「尋ねてください」)と「同胞アメリカ人」が保たれた。418Mは「尋ねる。」と命令調が消えた。ただし3文目(2文をまとめて渡した)は両方とも文の意味がずれた(1.2B「今日もいい日なのに、一緒に散歩してみませんか?」)。→ **文ごとに分けて渡す**のが前提。
+- 結論: 速度優先なら418M、品質優先なら1.2B(どちらもMIT)。リアルタイム用途は418M、字幕の後読みや品質重視は1.2B、が目安。サンプルは3文だけなので統計的な結論ではない。
+
+**`tools/vad-chunker`(新設、依存なし)**: 16kHzモノラルWAVを、RMSの無音検出(最大RMSの5%未満が300ms以上続く所、無音の真ん中)で区切り、前の区間の終端より300ms早く次を始める(オーバーラップ)。長すぎる(8秒)ときは最小エネルギー点で強制的に切る。単体試験5件成功。
+**測定(`jfk.wav` 11秒、rs-whisper tiny、WSL)**:
+- 最小区間1.5秒: 4区間(各2〜3.5秒)。**認識が崩れた**(「ask not」→「As not!」、「What your country…」だけ別区間)。
+- 最小区間4秒: 2区間(4.5秒・6.8秒)。1区間あたり約4〜5秒(プロセス起動と読み込み込み、**区間が短くても時間はほとんど減らない**=30秒固定の窓のため)。認識は一部欠けた(「…ask not!」「What your country can do for you as what you can do for your country.」)。
+- `RS_WHISPER_AUDIO_CTX=300`(窓を短縮)は時間が半分(約2秒)になるが、**無音を含む区間で同じ文を何度も繰り返す暴走**(最大52秒)が出た。**このままは使えない**(区間長に合わせた値と繰り返し検出が要る)。
+- 字幕の遅れの目安(区間が閉じてから字幕が出るまで): 認識約4〜5秒+翻訳約0.5〜1秒=**約5〜6秒**。区間の先頭の言葉は区間の長さ(4.5〜6.8秒)ぶん余計に待つので、**最悪で約10〜12秒**。実時間(遅れ数秒以内)には**届いていない**。
+- **未確認**: 話し声の途切れが多い実会話・雑音環境での区切り、whisper の常駐化による起動/読み込みコストの削減効果、小さい窓での暴走対策、tiny より大きいモデルでの品質。
+
+次の手: whisperを常駐化して読み込みを消す、窓短縮+繰り返し検出、区切りをオーバーラップ分で重複除去してつなぐ。
