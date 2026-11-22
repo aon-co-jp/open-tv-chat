@@ -1,0 +1,8 @@
+[package]
+name = "vad-chunker"
+version = "0.1.0"
+edition = "2021"
+description = "無音検出+オーバーラップで音声を区切る試作(open-tv-chat のストリーミング字幕用)"
+license = "MIT"
+
+[dependencies]
