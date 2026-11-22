@@ -1,0 +1,151 @@
+1a49dc27c1da7671e0ee12279ddf4ba619412856
+diff --git a/candle-examples/examples/quantized-t5/main.rs b/candle-examples/examples/quantized-t5/main.rs
+index 3e7806c..8af87de 100644
+--- a/candle-examples/examples/quantized-t5/main.rs
++++ b/candle-examples/examples/quantized-t5/main.rs
+@@ -104,7 +104,7 @@ impl T5ModelBuilder {
+                 Which::FlanT5Xxl => api.get("config-flan-t5-xxl.json")?,
+             },
+         };
+-        let tokenizer_filename = api.get("tokenizer.json")?;
++        let tokenizer_filename = match std::env::var("MT_TOKENIZER") { Ok(p) => std::path::PathBuf::from(p), Err(_) => api.get("tokenizer.json")? };
+         let weights_filename = match &args.weight_file {
+             Some(filename) => Self::get_local_or_remote_file(filename, &api)?,
+             None => match args.which {
+@@ -169,67 +169,80 @@ fn main() -> Result<()> {
+         .with_padding(None)
+         .with_truncation(None)
+         .map_err(E::msg)?;
++    let mut model = builder.build_model()?;
++    let t_load = std::time::Instant::now();
++    eprintln!("READY");
++    let stdin = std::io::stdin();
++    let mut line = String::new();
++    loop {
++        line.clear();
++        if stdin.read_line(&mut line)? == 0 { break; }
++        let prompt = line.trim().to_string();
++        if prompt.is_empty() { continue; }
++        let _ = t_load;
++        model.clear_kv_cache();
+     let tokens = tokenizer
+-        .encode(args.prompt, true)
+-        .map_err(E::msg)?
+-        .get_ids()
++            .encode(prompt, true)
++            .map_err(E::msg)?
++            .get_ids()
++            .to_vec();
++        let input_token_ids = Tensor::new(&tokens[..], device)?.unsqueeze(0)?;
++        let mut output_token_ids = [builder
++            .config
++            .decoder_start_token_id
++            .unwrap_or(builder.config.pad_token_id) as u32]
+         .to_vec();
+-    let input_token_ids = Tensor::new(&tokens[..], device)?.unsqueeze(0)?;
+-    let mut model = builder.build_model()?;
+-    let mut output_token_ids = [builder
+-        .config
+-        .decoder_start_token_id
+-        .unwrap_or(builder.config.pad_token_id) as u32]
+-    .to_vec();
+-    let temperature = if args.temperature <= 0. {
+-        None
+-    } else {
+-        Some(args.temperature)
+-    };
+-    let mut logits_processor = LogitsProcessor::new(299792458, temperature, args.top_p);
+-    let encoder_output = model.encode(&input_token_ids)?;
+-    let start = std::time::Instant::now();
+-
+-    for index in 0.. {
+-        if output_token_ids.len() > 512 {
+-            break;
+-        }
+-        let decoder_token_ids = if index == 0 || !builder.config.use_cache {
+-            Tensor::new(output_token_ids.as_slice(), device)?.unsqueeze(0)?
+-        } else {
+-            let last_token = *output_token_ids.last().unwrap();
+-            Tensor::new(&[last_token], device)?.unsqueeze(0)?
+-        };
+-        let logits = model
+-            .decode(&decoder_token_ids, &encoder_output)?
+-            .squeeze(0)?;
+-        let logits = if args.repeat_penalty == 1. {
+-            logits
++        let temperature = if args.temperature <= 0. {
++            None
+         } else {
+-            let start_at = output_token_ids.len().saturating_sub(args.repeat_last_n);
+-            candle_transformers::utils::apply_repeat_penalty(
+-                &logits,
+-                args.repeat_penalty,
+-                &output_token_ids[start_at..],
+-            )?
++            Some(args.temperature)
+         };
+-
+-        let next_token_id = logits_processor.sample(&logits)?;
+-        if next_token_id as usize == builder.config.eos_token_id {
+-            break;
+-        }
+-        output_token_ids.push(next_token_id);
+-        if let Some(text) = tokenizer.id_to_token(next_token_id) {
+-            let text = text.replace('▁', " ").replace("<0x0A>", "\n");
+-            print!("{text}");
+-            std::io::stdout().flush()?;
++        let mut logits_processor = LogitsProcessor::new(299792458, temperature, args.top_p);
++        let encoder_output = model.encode(&input_token_ids)?;
++        let start = std::time::Instant::now();
++    
++        for index in 0.. {
++            if output_token_ids.len() > 512 {
++                break;
++            }
++            let decoder_token_ids = if index == 0 || !builder.config.use_cache {
++                Tensor::new(output_token_ids.as_slice(), device)?.unsqueeze(0)?
++            } else {
++                let last_token = *output_token_ids.last().unwrap();
++                Tensor::new(&[last_token], device)?.unsqueeze(0)?
++            };
++            let logits = model
++                .decode(&decoder_token_ids, &encoder_output)?
++                .squeeze(0)?;
++            let logits = if args.repeat_penalty == 1. {
++                logits
++            } else {
++                let start_at = output_token_ids.len().saturating_sub(args.repeat_last_n);
++                candle_transformers::utils::apply_repeat_penalty(
++                    &logits,
++                    args.repeat_penalty,
++                    &output_token_ids[start_at..],
++                )?
++            };
++    
++            let next_token_id = logits_processor.sample(&logits)?;
++            if next_token_id as usize == builder.config.eos_token_id {
++                break;
++            }
++            output_token_ids.push(next_token_id);
++            if let Some(text) = tokenizer.id_to_token(next_token_id) {
++                let text = text.replace('▁', " ").replace("<0x0A>", "\n");
++                print!("{text}");
++                std::io::stdout().flush()?;
++            }
+         }
++        let dt = start.elapsed();
++        println!(
++            "\n{} tokens generated ({:.2} token/s)\n",
++            output_token_ids.len(),
++            output_token_ids.len() as f64 / dt.as_secs_f64(),
++        );
++    
+     }
+-    let dt = start.elapsed();
+-    println!(
+-        "\n{} tokens generated ({:.2} token/s)\n",
+-        output_token_ids.len(),
+-        output_token_ids.len() as f64 / dt.as_secs_f64(),
+-    );
+     Ok(())
+ }
