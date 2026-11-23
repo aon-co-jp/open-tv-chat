@@ -356,3 +356,10 @@ P2P既定)を参照。
 - `rs-whisper-la` の切り捨てを、有声率による位置の推定から、この語時刻(最初の未確定語の開始−0.15秒で切る)に置き換えた。バッファ上限5秒で、以前出た「ask ask」の重複は出なくなり、全文が正しく確定: `And so my fellow Americans ask not what your country can do for you ask what you can do for your country.` 計算は約15秒(切り捨てなしは約15〜20秒、環境の負荷で揺れる)。試験4件成功。
 - 終端の余分な語(「Ask」)は、最終ステップにも drop_dangling を適用して除去(限界: 句点の直後の本当の1語発話も落ちる)。
 - **未確認/限界**: 整列ヘッドは tiny 多言語の既定値(他モデルは別の組。tiny.en 等は未対応)。語時刻の正解との照合、長い音声、base以上のモデルは未測定。遅れは依然として約3〜4秒+処理時間で、論文の約3.3秒には未達。`open-tv-chat` へのマイク入力の組み込みは未了。
+
+## 2026-11-23 Update: word times (cross-attention DTW) and trimming by real times (English)
+- Added `Whisper::token_times` (average of the cross-attention alignment heads of multilingual tiny: 2-2, 3-0, 3-2, 3-3, 3-4, 3-5; per-frame normalisation; median filter; DTW), `transcribe_segments` (segment times from timestamp tokens) and the check tool `rs-whisper-ts`.
+- Measured (11 s `jfk.wav`, tiny, CPU): timestamp tokens give a single segment (0 to 10.56 s), too coarse for word-level trimming. DTW word times are monotone and plausible by eye (And=0.00, so=0.70, ... ask=8.02, country=10.04); not compared against ground truth.
+- `rs-whisper-la` now cuts the buffer 0.15 s before the first non-final word using these times instead of the voiced-ratio estimate. With a 5 s buffer limit the earlier "ask ask" duplicate is gone and the full text is correct. Compute about 15 s (20 s without trimming; noisy). 4 tests pass.
+- A stray trailing word ("Ask") is removed by also applying `drop_dangling` on the last step (limit: a genuine one-word utterance right after a sentence end is dropped too).
+- **Unverified/limits**: alignment heads are for multilingual tiny only (tiny.en and larger models not handled); no ground-truth check, long audio or base-or-larger models yet; delay is still about 3-4 s plus processing, short of the paper's 3.3 s; microphone integration into `open-tv-chat` is open.
