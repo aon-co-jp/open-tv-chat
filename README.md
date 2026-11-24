@@ -1,3 +1,5 @@
+> Latest translations / 翻訳の最新版: [0-LATEST-TRANSLATIONS.md](0-LATEST-TRANSLATIONS.md)
+
 # open-tv-chat
 
 Skype風「世界約130ヶ国語 リアルタイム音声翻訳」対応の
